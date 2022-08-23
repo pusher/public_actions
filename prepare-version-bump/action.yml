@@ -1,0 +1,89 @@
+name: 'Prepare version bump'
+author: 'Pusher'
+inputs:
+  current_version:
+    type: string
+    required: true
+  changelog_file:
+    type: string
+    required: false
+    default: "CHANGELOG.md"
+outputs:
+  new_version:
+    value: ${{ steps.bump.outputs.new_version }}
+  current_version:
+    value: ${{ steps.bump.outputs.current_version }}
+  release:
+    value: ${{ steps.bump.outputs.release }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Check release label
+      shell: bash
+      run: |
+        LABEL_NAME="${{ github.event.label.name }}"
+        echo "Label name: $LABEL_NAME"
+
+        if [ "$LABEL_NAME" == "release-major" ]; then
+          echo "RELEASE=major" >> $GITHUB_ENV
+        fi
+
+        if [ "$LABEL_NAME" == "release-minor" ]; then
+          echo "RELEASE=minor" >> $GITHUB_ENV
+        fi
+
+        if [ "$LABEL_NAME" == "release-patch" ]; then
+          echo "RELEASE=patch" >> $GITHUB_ENV
+        fi
+    - id: release_label
+      shell: bash
+      run: |
+        if [[ -z "${{ env.RELEASE }}" ]];
+        then
+          echo "You need to set a release label on PRs to the main branch"
+          exit 1
+        fi
+    - name: Install semver
+      shell: bash
+      run: |
+        export DIR=$(mktemp -d)
+        cd $DIR
+
+        curl https://github.com/fsaintjacques/semver-tool/archive/3.2.0.tar.gz -L -o semver.tar.gz
+        shasum -a 256 semver.tar.gz | grep 2071b22be55f82b2e59716e23ff1ad4d4d26ce620aafcc1af3c621ea3cdee1af
+        tar -xvf semver.tar.gz
+        sudo cp semver-tool-3.2.0/src/semver /usr/local/bin
+
+        cd -
+    - name: Setup git user
+      shell: bash
+      run: |
+        git config user.email "pusher-ci@pusher.com"
+        git config user.name "Pusher CI"
+        git fetch
+        git checkout ${{ github.event.pull_request.head.ref }}
+    - id: bump
+      shell: bash
+      run: |
+        CURRENT_VERSION=${{ inputs.current_version }}
+        RELEASE=${{ env.RELEASE }}
+
+        NEW_VERSION=$(semver bump $RELEASE $CURRENT_VERSION)
+
+        echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
+        echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+
+        echo "::set-output name=current_version::${CURRENT_VERSION}"
+        echo "::set-output name=new_version::${NEW_VERSION}"
+        echo "::set-output name=release::${RELEASE}"
+    - name: Update CHANGELOG.md
+      shell: bash
+      run: |
+        echo "${{ github.event.pull_request.body }}" | csplit -s - "/## CHANGELOG/"
+        echo "# Changelog
+
+        ## ${{ env.NEW_VERSION }}
+        " >> CHANGELOG.tmp
+        grep -E "^[-*]" xx01 >> CHANGELOG.tmp
+        grep -v "^# " ${{ inputs.changelog_file }} >> CHANGELOG.tmp
+        cp CHANGELOG.tmp ${{ inputs.changelog_file }}
