@@ -1,6 +1,5 @@
 name: 'Install Pusher CLI'
 author: 'Pusher'
-inputs:
 runs:
   using: 'composite'
   steps:
