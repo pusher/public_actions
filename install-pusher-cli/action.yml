@@ -1,0 +1,18 @@
+name: 'Install Pusher CLI'
+author: 'Pusher'
+inputs:
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Pusher cli
+      shell: bash
+      run: |
+        export DIR=$(mktemp -d)
+        cd $DIR
+
+        curl https://github.com/pusher/cli/releases/download/v0.17/pusher_0.17_Linux_x86_64.tar.gz -L -o pusher-cli.tar.gz
+        shasum -a 256 pusher-cli.tar.gz | grep 077df3db58f0dba0f3fbb742a5d3062c0e606e0651b4da3b8e46f19985093c09
+        tar -xvf pusher-cli.tar.gz
+        sudo cp pusher /usr/local/bin
+
+        cd -
